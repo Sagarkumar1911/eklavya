@@ -26,8 +26,12 @@ div[data-testid="stToggle"] p, div[data-testid="stNumberInput"] p, div[data-test
     color: #1a1814 !important;
     font-weight: 600 !important;
 }
-div[data-testid="stToggle"] > label > div {
-    background-color: #d1d5db !important; /* Make toggle track visible */
+/* Fix toggle visibility against forced white background */
+div[data-baseweb="checkbox"] > div:first-child {
+    background-color: #3b82f6 !important; /* visible blue when off */
+}
+div[data-baseweb="checkbox"] div[data-checked="true"] {
+    background-color: #1d4ed8 !important; /* darker blue when on */
 }
 
 /* Pipeline flow diagram */
@@ -127,7 +131,8 @@ with col1:
 with col2:
     topic = st.text_input("Topic", value="Types of angles")
 
-show_json = st.toggle("Show raw JSON output", value=False)
+st.markdown('<div style="color:#1a1814; font-weight:600; font-size:1rem; margin-bottom:-10px;">Show raw JSON output</div>', unsafe_allow_html=True)
+show_json = st.toggle("Show raw JSON output", value=False, label_visibility="collapsed")
 run = st.button("⚡ Generate Content", use_container_width=True, type="primary")
 
 
