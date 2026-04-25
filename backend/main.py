@@ -80,20 +80,14 @@ def call_groq(system: str, user: str) -> str:
         )
         return response.choices[0].message.content
     except Exception as e:
-        err = str(e)
-        if "429" in err or "rate" in err.lower():
-            raise HTTPException(status_code=429, detail=f"Groq rate limit: {err}")
-        if "401" in err or "auth" in err.lower():
-            raise HTTPException(status_code=401, detail="Invalid GROQ_API_KEY. Check your backend/.env file.")
-        raise HTTPException(status_code=500, detail=f"Groq API error: {err}")
+        if "429" in str(e) or "rate" in str(e).lower():
+            raise HTTPException(status_code=429, detail="Groq rate limit exceeded.")
+        if "401" in str(e) or "auth" in str(e).lower():
+            raise HTTPException(status_code=401, detail="Invalid API key.")
+        raise HTTPException(status_code=500, detail=f"API error: {e}")
 
 
-# ══════════════════════════════════════════════════════════════════════════════
-# Agent 1 — Generator
-# Responsibility: Generate draft educational content for a given grade & topic.
-# Input:  { grade, topic }
-# Output: { explanation, mcqs[] }
-# ══════════════════════════════════════════════════════════════════════════════
+# --- Generator Agent ---
 class GeneratorAgent:
     """Generates grade-appropriate educational content (explanation + MCQs)."""
 
@@ -147,12 +141,7 @@ Output format (JSON only):
             raise HTTPException(status_code=500, detail=f"Generator Agent: invalid JSON — {e}")
 
 
-# ══════════════════════════════════════════════════════════════════════════════
-# Agent 2 — Reviewer
-# Responsibility: Evaluate the Generator's output for quality.
-# Input:  GeneratedContent + grade
-# Output: { status: "pass"|"fail", feedback: [...] }
-# ══════════════════════════════════════════════════════════════════════════════
+# --- Reviewer Agent ---
 class ReviewerAgent:
     """Evaluates generated content for age-appropriateness, correctness, and clarity."""
 
@@ -219,20 +208,15 @@ def run_pipeline(req: ContentRequest):
         )
 
     # Step 1 — Generator Agent
-    print(f"[Pipeline] Step 1: Generator — grade={req.grade}, topic={req.topic}")
     generated: GeneratedContent = generator.run(req.grade, req.topic)
 
     # Step 2 — Reviewer Agent
-    print(f"[Pipeline] Step 2: Reviewer")
     review: ReviewResult = reviewer.run(generated, req.grade)
 
     # Step 3 — Refinement (one pass only, only if review failed)
     refined: Optional[GeneratedContent] = None
     if review.status == "fail":
-        print(f"[Pipeline] Step 3: Refinement triggered — feedback: {review.feedback}")
         refined = generator.run(req.grade, req.topic, feedback=review.feedback)
-
-    print(f"[Pipeline] Done — status={review.status}, refined={refined is not None}")
     return PipelineResponse(
         generated=generated,
         review=review,
