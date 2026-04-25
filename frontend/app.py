@@ -21,6 +21,15 @@ html, body, [data-testid="stAppViewContainer"], .stApp {
 .logo { font-family:'Fraunces',serif; font-size:3.5rem; color:#2d6a4f; margin-bottom: 0px; line-height: 1.2; }
 .tag  { color:#6b6560; font-size:1.15rem; margin-top:0px; margin-bottom:1.5rem; }
 
+/* Fix toggle visibility against forced white background */
+div[data-testid="stToggle"] p, div[data-testid="stNumberInput"] p, div[data-testid="stTextInput"] p {
+    color: #1a1814 !important;
+    font-weight: 600 !important;
+}
+div[data-testid="stToggle"] > label > div {
+    background-color: #d1d5db !important; /* Make toggle track visible */
+}
+
 /* Pipeline flow diagram */
 .pipeline-flow {
     display:flex; align-items:center; justify-content:center;
