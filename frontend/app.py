@@ -118,6 +118,7 @@ with col1:
 with col2:
     topic = st.text_input("Topic", value="Types of angles")
 
+show_json = st.toggle("Show raw JSON output", value=False)
 run = st.button("⚡ Generate Content", use_container_width=True, type="primary")
 
 
@@ -163,7 +164,8 @@ def render_review(data: dict):
 
 
 def show_json_block(label: str, data: dict):
-    with st.expander(f"📦 View raw JSON — {label}"):
+    if show_json:
+        st.markdown(f'<div class="sec-lbl" style="margin-top:12px">Raw JSON — {label}</div>', unsafe_allow_html=True)
         st.json(data)
 
 
