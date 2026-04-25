@@ -12,9 +12,10 @@ st.set_page_config(
 st.markdown("""
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Fraunces:ital,wght@0,600;1,400&family=DM+Sans:wght@400;500&display=swap');
-html, body, [class*="css"], [data-testid="stAppViewContainer"] {
+html, body, [data-testid="stAppViewContainer"], .stApp {
     font-family: 'DM Sans', sans-serif;
     background-color: #ffffff !important;
+    color: #1a1814 !important;
 }
 
 .logo { font-family:'Fraunces',serif; font-size:3.5rem; color:#2d6a4f; margin-bottom: 0px; line-height: 1.2; }
@@ -117,7 +118,6 @@ with col1:
 with col2:
     topic = st.text_input("Topic", value="Types of angles")
 
-show_json = st.toggle("Show raw JSON output", value=False)
 run = st.button("⚡ Generate Content", use_container_width=True, type="primary")
 
 
@@ -163,8 +163,7 @@ def render_review(data: dict):
 
 
 def show_json_block(label: str, data: dict):
-    if show_json:
-        st.markdown(f'<div class="sec-lbl" style="margin-top:12px">Raw JSON — {label}</div>', unsafe_allow_html=True)
+    with st.expander(f"📦 View raw JSON — {label}"):
         st.json(data)
 
 
