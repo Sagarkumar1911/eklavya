@@ -4,7 +4,7 @@ import requests
 BACKEND_URL = "http://localhost:8000"
 
 st.set_page_config(
-    page_title="Eklavya — AI Content Pipeline",
+    page_title="Eklavya — AI Content Pipeline V2",
     page_icon="📚",
     layout="wide",
 )
@@ -12,150 +12,113 @@ st.set_page_config(
 st.markdown("""
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Fraunces:ital,wght@0,600;1,400&family=DM+Sans:wght@400;500&display=swap');
-html, body, [data-testid="stAppViewContainer"], .stApp {
-    font-family: 'DM Sans', sans-serif;
-    background-color: #ffffff !important;
-    color: #1a1814 !important;
-}
-
-.logo { font-family:'Fraunces',serif; font-size:3.5rem; color:#2d6a4f; margin-bottom: 0px; line-height: 1.2; }
-.tag  { color:#6b6560; font-size:1.15rem; margin-top:0px; margin-bottom:1.5rem; }
-
-/* Fix toggle visibility against forced white background */
-div[data-testid="stToggle"] p, div[data-testid="stNumberInput"] p, div[data-testid="stTextInput"] p {
-    color: #1a1814 !important;
-    font-weight: 600 !important;
-}
-/* Fix toggle visibility against forced white background */
-div[data-baseweb="checkbox"] > div:first-child {
-    background-color: #3b82f6 !important; /* visible blue when off */
-}
-div[data-baseweb="checkbox"] div[data-checked="true"] {
-    background-color: #1d4ed8 !important; /* darker blue when on */
-}
-
-/* Pipeline flow diagram */
-.pipeline-flow {
-    display:flex; align-items:center; justify-content:center;
-    gap:0; background:#f7f5f0; border:1px solid #e4e0d8;
-    border-radius:12px; padding:16px 20px; margin-bottom:1.5rem;
-}
-.pf-node {
-    display:flex; flex-direction:column; align-items:center;
-    background:#fff; border:1px solid #e4e0d8; border-radius:10px;
-    padding:10px 18px; min-width:110px; text-align:center;
-}
-.pf-node .icon { font-size:1.4rem; margin-bottom:4px; }
-.pf-node .lbl  { font-size:0.7rem; font-weight:700; text-transform:uppercase; letter-spacing:0.07em; color:#2d6a4f; }
-.pf-node .sub  { font-size:0.65rem; color:#6b6560; margin-top:2px; }
-.pf-arrow      { font-size:1.2rem; color:#b0a99f; padding:0 6px; }
-.pf-node.active-node { border-color:#2d6a4f; background:#e8f5ee; }
-
-/* Step headers */
-.step-box {
-    padding:12px 18px; border-radius:10px; margin:6px 0 4px 0;
-    font-weight:600; font-size:0.82rem; text-transform:uppercase; letter-spacing:0.07em;
-}
+html, body, [class*="css"] { font-family: 'DM Sans', sans-serif; }
+.logo { font-family:'Fraunces',serif; font-size:3.5rem; color:#2d6a4f; }
+.tag  { color:#6b6560; font-size:0.85rem; margin-top:-8px; margin-bottom:1rem; }
+.pipeline-flow { display:flex; align-items:center; justify-content:center; gap:0; background:#f7f5f0; border:1px solid #e4e0d8; border-radius:12px; padding:14px 16px; margin-bottom:1.5rem; flex-wrap:wrap; }
+.pf-node { display:flex; flex-direction:column; align-items:center; background:#fff; border:1px solid #e4e0d8; border-radius:10px; padding:8px 12px; min-width:90px; text-align:center; margin:3px; }
+.pf-node .icon { font-size:1.2rem; margin-bottom:3px; }
+.pf-node .lbl  { font-size:0.65rem; font-weight:700; text-transform:uppercase; letter-spacing:0.07em; color:#2d6a4f; }
+.pf-node .sub  { font-size:0.6rem; color:#6b6560; margin-top:1px; }
+.pf-arrow { font-size:1rem; color:#b0a99f; padding:0 4px; }
+.step-box { padding:11px 16px; border-radius:10px; margin:6px 0 4px 0; font-weight:600; font-size:0.82rem; text-transform:uppercase; letter-spacing:0.07em; }
 .s-green { background:#e8f5ee; color:#2d6a4f; border-left:4px solid #2d6a4f; }
 .s-blue  { background:#dbeafe; color:#1e40af; border-left:4px solid #1e40af; }
 .s-amber { background:#fef3c7; color:#b45309; border-left:4px solid #d97706; }
+.s-purple{ background:#f3e8ff; color:#6b21a8; border-left:4px solid #9333ea; }
 .s-done  { background:#e8f5ee; color:#2d6a4f; border-left:4px solid #2d6a4f; }
-
-/* Content blocks */
-.expl { font-size:0.95rem; line-height:1.75; color:#1a1814; background:#f7f5f0; padding:14px 18px; border-radius:10px; border:1px solid #e4e0d8; }
-.mcq  { border:1px solid #e4e0d8; border-radius:10px; padding:14px 16px; margin-bottom:10px; background:#fafaf8; }
-.mcq-q { font-weight:600; font-size:0.9rem; margin-bottom:10px; color:#1a1814; }
-.opt         { display:inline-block; padding:4px 13px; border-radius:99px; font-size:0.82rem; margin:3px; border:1px solid #e4e0d8; background:#fff; color:#1a1814; }
-.opt-correct { display:inline-block; padding:4px 13px; border-radius:99px; font-size:0.82rem; margin:3px; background:#e8f5ee; border:2px solid #2d6a4f; color:#2d6a4f; font-weight:700; }
-
-/* Feedback */
-.fb-fail { background:#fee2e2; color:#991b1b; border:1px solid #fca5a5; border-radius:8px; padding:9px 14px; font-size:0.85rem; margin-bottom:6px; }
-.fb-pass { background:#e8f5ee; color:#2d6a4f; border:1px solid #74c69d; border-radius:8px; padding:9px 14px; font-size:0.85rem; margin-bottom:6px; }
-
-/* Badges */
-.badge-pass    { background:#e8f5ee; color:#2d6a4f; padding:4px 12px; border-radius:99px; font-size:0.75rem; font-weight:700; }
-.badge-fail    { background:#fee2e2; color:#991b1b; padding:4px 12px; border-radius:99px; font-size:0.75rem; font-weight:700; }
-.badge-refined { background:#fef3c7; color:#b45309; padding:4px 12px; border-radius:99px; font-size:0.75rem; font-weight:700; }
-
-.sec-lbl { font-size:0.7rem; font-weight:700; text-transform:uppercase; letter-spacing:0.09em; color:#6b6560; margin:14px 0 6px 0; }
-
-/* JSON viewer */
-.json-block { background:#1e1e2e; color:#cdd6f4; font-family:monospace; font-size:0.75rem;
-    border-radius:10px; padding:14px 16px; overflow-x:auto; margin-top:6px; line-height:1.6; }
+.s-red   { background:#fee2e2; color:#991b1b; border-left:4px solid #dc2626; }
+.expl { font-size:0.95rem; line-height:1.75; background:#f7f5f0; padding:14px 18px; border-radius:10px; border:1px solid #e4e0d8; color:#1e1e1e; }
+.tnote { font-size:0.85rem; line-height:1.65; background:#fef9ee; padding:12px 16px; border-radius:10px; border:1px solid #fde68a; color:#1e1e1e; }
+.mcq  { border:1px solid #e4e0d8; border-radius:10px; padding:13px 15px; margin-bottom:9px; background:#fafaf8; color:#1e1e1e; }
+.mcq-q { font-weight:600; font-size:0.88rem; margin-bottom:9px; }
+.opt         { display:inline-block; padding:4px 12px; border-radius:99px; font-size:0.8rem; margin:3px; border:1px solid #e4e0d8; background:#fff; color:#1e1e1e; }
+.opt-correct { display:inline-block; padding:4px 12px; border-radius:99px; font-size:0.8rem; margin:3px; background:#e8f5ee; border:2px solid #2d6a4f; color:#2d6a4f; font-weight:700; }
+.score-row { display:flex; align-items:center; gap:10px; margin-bottom:7px; }
+.score-lbl { font-size:0.78rem; color:#6b6560; width:160px; flex-shrink:0; }
+.score-bar-bg { flex:1; height:8px; background:#e4e0d8; border-radius:99px; overflow:hidden; }
+.score-bar    { height:100%; border-radius:99px; }
+.score-val { font-size:0.78rem; font-weight:600; width:24px; text-align:right; }
+.fb-fail { background:#fee2e2; color:#991b1b; border:1px solid #fca5a5; border-radius:8px; padding:8px 13px; font-size:0.82rem; margin-bottom:5px; }
+.fb-pass { background:#e8f5ee; color:#2d6a4f; border:1px solid #74c69d; border-radius:8px; padding:8px 13px; font-size:0.82rem; margin-bottom:5px; }
+.fb-field { font-family:monospace; font-size:0.75rem; background:#fff; padding:1px 5px; border-radius:4px; border:1px solid #e4e0d8; margin-right:5px; }
+.tag-grid { display:grid; grid-template-columns:1fr 1fr; gap:7px; }
+.tag-item { background:#f7f5f0; border:1px solid #e4e0d8; border-radius:8px; padding:8px 12px; color:#1e1e1e; }
+.tag-key  { font-size:0.68rem; text-transform:uppercase; letter-spacing:0.06em; color:#6b6560; margin-bottom:2px; }
+.tag-val  { font-size:0.85rem; font-weight:500; }
+.badge-approved { background:#e8f5ee; color:#2d6a4f; padding:3px 11px; border-radius:99px; font-size:0.72rem; font-weight:700; }
+.badge-rejected { background:#fee2e2; color:#991b1b; padding:3px 11px; border-radius:99px; font-size:0.72rem; font-weight:700; }
+.badge-refined  { background:#fef3c7; color:#b45309; padding:3px 11px; border-radius:99px; font-size:0.72rem; font-weight:700; }
+.run-meta { font-size:0.75rem; color:#6b6560; margin-bottom:6px; }
+.sec-lbl { font-size:0.68rem; font-weight:700; text-transform:uppercase; letter-spacing:0.09em; color:#6b6560; margin:12px 0 5px 0; }
+.threshold-note { font-size:0.75rem; color:#6b6560; background:#f7f5f0; border:1px solid #e4e0d8; border-radius:8px; padding:7px 12px; margin-bottom:10px; }
 </style>
 """, unsafe_allow_html=True)
 
-# ── Header ────────────────────────────────────────────────────────────────────
+# ── Header ─────────────────────────────────────────────────────────────────────
 st.markdown('<div class="logo">📚 eklavya</div>', unsafe_allow_html=True)
-st.markdown('<div class="tag">AI Content Pipeline — making learning accessible</div>', unsafe_allow_html=True)
+st.markdown('<div class="tag">Governed AI Content Pipeline v2 — auditable, schema-validated</div>', unsafe_allow_html=True)
 
-# ── Pipeline Flow Diagram ─────────────────────────────────────────────────────
+# ── Pipeline Flow ──────────────────────────────────────────────────────────────
 st.markdown("""
 <div class="pipeline-flow">
-  <div class="pf-node">
-    <div class="icon">📥</div>
-    <div class="lbl">Input</div>
-    <div class="sub">Grade + Topic</div>
-  </div>
+  <div class="pf-node"><div class="icon">📥</div><div class="lbl">Input</div><div class="sub">Grade + Topic</div></div>
   <div class="pf-arrow">→</div>
-  <div class="pf-node">
-    <div class="icon">⚙️</div>
-    <div class="lbl">Generator</div>
-    <div class="sub">Agent 1</div>
-  </div>
+  <div class="pf-node"><div class="icon">⚙️</div><div class="lbl">Generator</div><div class="sub">Agent 1</div></div>
   <div class="pf-arrow">→</div>
-  <div class="pf-node">
-    <div class="icon">🔍</div>
-    <div class="lbl">Reviewer</div>
-    <div class="sub">Agent 2</div>
-  </div>
+  <div class="pf-node"><div class="icon">🔍</div><div class="lbl">Reviewer</div><div class="sub">Scores 1–5</div></div>
   <div class="pf-arrow">→</div>
-  <div class="pf-node">
-    <div class="icon">✨</div>
-    <div class="lbl">Refine</div>
-    <div class="sub">if fail (1×)</div>
-  </div>
+  <div class="pf-node"><div class="icon">🔁</div><div class="lbl">Refiner</div><div class="sub">max 2×</div></div>
   <div class="pf-arrow">→</div>
-  <div class="pf-node">
-    <div class="icon">📤</div>
-    <div class="lbl">Output</div>
-    <div class="sub">Final Content</div>
-  </div>
+  <div class="pf-node"><div class="icon">🏷️</div><div class="lbl">Tagger</div><div class="sub">if approved</div></div>
+  <div class="pf-arrow">→</div>
+  <div class="pf-node"><div class="icon">📦</div><div class="lbl">RunArtifact</div><div class="sub">audit trail</div></div>
 </div>
 """, unsafe_allow_html=True)
 
-# ── Inputs ────────────────────────────────────────────────────────────────────
-col1, col2 = st.columns([1, 3])
-with col1:
-    grade = st.number_input("Grade", min_value=1, max_value=12, value=4)
-with col2:
-    topic = st.text_input("Topic", value="Types of angles")
-
-st.markdown('<div style="color:#1a1814; font-weight:600; font-size:1rem; margin-bottom:-10px;">Show raw JSON output</div>', unsafe_allow_html=True)
-show_json = st.toggle("Show raw JSON output", value=False, label_visibility="collapsed")
-run = st.button("⚡ Generate Content", use_container_width=True, type="primary")
+# ── Tabs ───────────────────────────────────────────────────────────────────────
+tab_generate, tab_history = st.tabs(["⚡ Generate", "📋 History"])
 
 
-# ── Helpers ───────────────────────────────────────────────────────────────────
-def render_content(data: dict):
+# ── Helpers ────────────────────────────────────────────────────────────────────
+def score_color(v):
+    if v >= 4: return "#2d6a4f"
+    if v >= 3: return "#d97706"
+    return "#dc2626"
+
+def score_bar_width(v):
+    return int((v / 5) * 100)
+
+def render_content(data: dict, label=""):
     html = ""
-    expl = data.get("explanation", "")
-    if expl:
+    expl = data.get("explanation", {})
+    expl_text = expl.get("text", "") if isinstance(expl, dict) else str(expl)
+    if expl_text:
         html += '<div class="sec-lbl">Explanation</div>'
-        html += f'<div class="expl">{expl}</div>'
-        html += '<hr style="border:none;border-top:1px solid #e4e0d8;margin:14px 0">'
+        html += f'<div class="expl">{expl_text}</div>'
+
+    tn = data.get("teacher_notes", {})
+    if tn:
+        lo   = tn.get("learning_objective", "")
+        misc = tn.get("common_misconceptions", [])
+        html += '<div class="sec-lbl" style="margin-top:10px">Teacher Notes</div>'
+        html += f'<div class="tnote"><b>Learning objective:</b> {lo}'
+        if misc:
+            html += '<br><b>Common misconceptions:</b><ul style="margin:4px 0 0 16px">'
+            for m in misc: html += f'<li style="font-size:0.83rem">{m}</li>'
+            html += '</ul>'
+        html += '</div>'
 
     mcqs = data.get("mcqs", [])
     if mcqs:
-        html += '<div class="sec-lbl">Questions</div>'
+        html += '<div class="sec-lbl" style="margin-top:10px">Questions</div>'
         for i, q in enumerate(mcqs, 1):
-            question_text = q.get("question", "")
-            answer_key    = q.get("answer", "").strip().upper()
-            options       = q.get("options", [])
-            html += f'<div class="mcq"><div class="mcq-q">Q{i}. {question_text}</div><div>'
-            for opt in options:
-                opt_letter = opt.strip()[0].upper() if opt.strip() else ""
-                cls = "opt-correct" if opt_letter == answer_key else "opt"
+            q_text   = q.get("question", "")
+            ci       = q.get("correct_index", -1)
+            options  = q.get("options", [])
+            html += f'<div class="mcq"><div class="mcq-q">Q{i}. {q_text}</div><div>'
+            for j, opt in enumerate(options):
+                cls   = "opt-correct" if j == ci else "opt"
                 html += f'<span class="{cls}">{opt}</span>'
             html += '</div></div>'
 
@@ -163,90 +126,171 @@ def render_content(data: dict):
 
 
 def render_review(data: dict):
-    is_pass   = data.get("status", "").lower() == "pass"
-    badge_cls = "badge-pass" if is_pass else "badge-fail"
-    label     = "Content approved ✓" if is_pass else "Issues found — refinement triggered"
-    fb_cls    = "fb-pass" if is_pass else "fb-fail"
-    icon      = "✓" if is_pass else "⚠"
+    scores  = data.get("scores", {})
+    passed  = data.get("passed", False)
+    feedback= data.get("feedback", [])
 
-    html  = f'<div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">'
-    html += f'<span class="{badge_cls}">{data.get("status","").upper()}</span>'
-    html += f'<span style="font-size:0.88rem;color:#6b6560">{label}</span></div>'
-    for fb in data.get("feedback", []):
-        html += f'<div class="{fb_cls}">{icon} {fb}</div>'
+    dims = [
+        ("Age appropriateness", "age_appropriateness"),
+        ("Correctness",         "correctness"),
+        ("Clarity",             "clarity"),
+        ("Coverage",            "coverage"),
+    ]
+    html = '<div class="threshold-note">Pass threshold: <b>correctness ≥ 4</b> AND <b>average ≥ 3.5</b></div>'
+    for lbl, key in dims:
+        v = scores.get(key, 0)
+        c = score_color(v)
+        w = score_bar_width(v)
+        html += f'''<div class="score-row">
+          <div class="score-lbl">{lbl}</div>
+          <div class="score-bar-bg"><div class="score-bar" style="width:{w}%;background:{c}"></div></div>
+          <div class="score-val" style="color:{c}">{v}/5</div>
+        </div>'''
+
+    avg = sum(scores.get(k, 0) for _, k in dims) / 4
+    html += f'<div style="font-size:0.78rem;color:#6b6560;margin:6px 0 10px">Average: <b>{avg:.2f}</b> — <b>{"PASS ✓" if passed else "FAIL ✗"}</b></div>'
+
+    fb_cls = "fb-pass" if passed else "fb-fail"
+    for fb in feedback:
+        field = fb.get("field", "")
+        issue = fb.get("issue", "")
+        icon  = "✓" if passed else "⚠"
+        html += f'<div class="{fb_cls}"><span class="fb-field">{field}</span>{icon} {issue}</div>'
+
     st.markdown(html, unsafe_allow_html=True)
 
 
-def show_json_block(label: str, data: dict):
-    if show_json:
-        st.markdown(f'<div class="sec-lbl" style="margin-top:12px">Raw JSON — {label}</div>', unsafe_allow_html=True)
-        st.json(data)
+def render_tags(tags: dict):
+    if not tags: return
+    html = '<div class="tag-grid">'
+    items = [
+        ("Subject",      tags.get("subject", "")),
+        ("Topic",        tags.get("topic", "")),
+        ("Difficulty",   tags.get("difficulty", "")),
+        ("Bloom's Level",tags.get("blooms_level", "")),
+        ("Grade",        str(tags.get("grade", ""))),
+        ("Content Type", ", ".join(tags.get("content_type", []))),
+    ]
+    for k, v in items:
+        html += f'<div class="tag-item"><div class="tag-key">{k}</div><div class="tag-val">{v}</div></div>'
+    html += '</div>'
+    st.markdown(html, unsafe_allow_html=True)
 
 
-# ── Pipeline ──────────────────────────────────────────────────────────────────
-if run:
-    if not topic.strip():
-        st.error("Please enter a topic.")
-        st.stop()
+# ── Generate Tab ────────────────────────────────────────────────────────────────
+with tab_generate:
+    col1, col2, col3 = st.columns([1, 2, 1])
+    with col1: grade   = st.number_input("Grade", min_value=1, max_value=12, value=4)
+    with col2: topic   = st.text_input("Topic", value="Types of angles")
+    with col3: user_id = st.text_input("User ID", value="demo_user")
 
-    st.divider()
+    show_json = st.toggle("Show raw RunArtifact JSON", value=False)
+    run       = st.button("⚡ Generate Content", use_container_width=True, type="primary")
 
-    with st.spinner("Running AI pipeline… this may take 10–20 seconds"):
-        try:
-            resp = requests.post(
-                f"{BACKEND_URL}/generate",
-                json={"grade": int(grade), "topic": topic},
-                timeout=120,
-            )
-            resp.raise_for_status()
-            result = resp.json()
-        except requests.exceptions.ConnectionError:
-            st.error("❌ Cannot connect to backend. Start it with:")
-            st.code("cd backend\nuvicorn main:app --reload", language="bash")
+    if run:
+        if not topic.strip():
+            st.error("Please enter a topic.")
             st.stop()
-        except requests.exceptions.HTTPError as e:
+
+        st.divider()
+        with st.spinner("Running governed pipeline… may take 20–40s"):
             try:
-                detail = resp.json().get("detail", str(e))
-            except Exception:
-                detail = resp.text or str(e)
-            st.error(f"❌ Backend error: {detail}")
-            st.stop()
+                resp = requests.post(
+                    f"{BACKEND_URL}/generate",
+                    json={"grade": int(grade), "topic": topic, "user_id": user_id},
+                    timeout=180,
+                )
+                resp.raise_for_status()
+                result = resp.json()
+            except requests.exceptions.ConnectionError:
+                st.error("❌ Cannot connect to backend.")
+                st.code("cd backend\\nuvicorn main:app --reload", language="bash")
+                st.stop()
+            except requests.exceptions.HTTPError:
+                st.error(f"❌ Backend error: {resp.json().get('detail', 'Unknown error')}")
+                st.stop()
+            except Exception as e:
+                st.error(f"❌ {e}")
+                st.stop()
+
+        attempts  = result.get("attempts", [])
+        final     = result.get("final", {})
+        run_id    = result.get("run_id", "")
+        ts        = result.get("timestamps", {})
+        is_approved = final.get("status") == "approved"
+
+        st.markdown(f'<div class="run-meta">run_id: <code>{run_id}</code> · {len(attempts)} attempt(s) · started: {ts.get("started_at","")[:19]}</div>', unsafe_allow_html=True)
+
+        # Show each attempt
+        for attempt in attempts:
+            n      = attempt.get("attempt", 1)
+            passed = attempt.get("passed", False)
+            draft  = attempt.get("draft", {})
+            review = attempt.get("review", {})
+
+            prefix = "Initial" if n == 1 else f"Refinement {n-1}"
+            color  = "s-green" if passed else "s-amber"
+
+            st.markdown(f'<div class="step-box s-green">⚙️ {prefix} — Generator</div>', unsafe_allow_html=True)
+            render_content(draft)
+
+            icon2  = "✅ Passed" if passed else "⚠️ Failed"
+            st.markdown(f'<div class="step-box s-blue">🔍 {prefix} — Reviewer &nbsp; {icon2}</div>', unsafe_allow_html=True)
+            render_review(review)
+            st.divider()
+
+        # Final result
+        if is_approved:
+            st.markdown('<div class="step-box s-purple">🏷️ Tagger Agent — content classified</div>', unsafe_allow_html=True)
+            render_tags(final.get("tags", {}))
+            st.divider()
+            st.markdown('<div class="step-box s-done">✅ Final Output — Approved</div>', unsafe_allow_html=True)
+            st.markdown('<span class="badge-approved">✓ Approved</span>', unsafe_allow_html=True)
+            st.write("")
+            render_content(final.get("content", {}))
+        else:
+            st.markdown('<div class="step-box s-red">❌ Final Status — Rejected</div>', unsafe_allow_html=True)
+            st.error("Content could not meet quality thresholds after maximum refinement attempts.")
+
+        if show_json:
+            st.markdown('<div class="sec-lbl" style="margin-top:14px">Full RunArtifact JSON</div>', unsafe_allow_html=True)
+            st.json(result)
+
+        st.success(f"🎉 Pipeline complete — status: {final.get('status','').upper()}")
+
+
+# ── History Tab ─────────────────────────────────────────────────────────────────
+with tab_history:
+    st.markdown("### Past Pipeline Runs")
+    filter_user = st.text_input("Filter by User ID (leave blank for all)", value="")
+    load_btn    = st.button("Load History", type="secondary")
+
+    if load_btn:
+        try:
+            params = {"user_id": filter_user} if filter_user.strip() else {}
+            resp   = requests.get(f"{BACKEND_URL}/history", params=params, timeout=30)
+            resp.raise_for_status()
+            history = resp.json()
         except Exception as e:
-            st.error(f"❌ Unexpected error: {e}")
+            st.error(f"❌ Could not load history: {e}")
             st.stop()
 
-    gen_data   = result.get("generated", {})
-    rev_data   = result.get("review", {})
-    is_pass    = rev_data.get("status", "").lower() == "pass"
-    refinement = result.get("refinement_triggered", False)
-    refined    = result.get("refined")
+        total     = history.get("total", 0)
+        artifacts = history.get("artifacts", [])
+        st.markdown(f"**{total} run(s) found**")
 
-    # ── Step 1 ────────────────────────────────────────────────────────────────
-    st.markdown('<div class="step-box s-green">⚙️ Step 1 — Generator Agent &nbsp; ✅ Done</div>', unsafe_allow_html=True)
-    render_content(gen_data)
-    show_json_block("Generator output", gen_data)
+        for art in artifacts:
+            run_id   = art.get("run_id", "")[:8]
+            inp      = art.get("input", {})
+            final    = art.get("final", {})
+            ts       = art.get("timestamps", {})
+            status   = final.get("status", "unknown")
+            attempts = len(art.get("attempts", []))
+            badge    = "badge-approved" if status == "approved" else "badge-rejected"
 
-    st.divider()
-
-    # ── Step 2 ────────────────────────────────────────────────────────────────
-    s2_icon = "✅ Approved" if is_pass else "⚠️ Issues found"
-    st.markdown(f'<div class="step-box s-blue">🔍 Step 2 — Reviewer Agent &nbsp; {s2_icon}</div>', unsafe_allow_html=True)
-    render_review(rev_data)
-    show_json_block("Reviewer output", rev_data)
-
-    st.divider()
-
-    # ── Step 3 ────────────────────────────────────────────────────────────────
-    if refinement and refined:
-        st.markdown('<div class="step-box s-amber">✨ Step 3 — Refinement + Final Output</div>', unsafe_allow_html=True)
-        st.markdown('<span class="badge-refined">✦ Refined after review</span>', unsafe_allow_html=True)
-        st.write("")
-        render_content(refined)
-        show_json_block("Refined output", refined)
-    else:
-        st.markdown('<div class="step-box s-done">✅ Step 3 — Final Output</div>', unsafe_allow_html=True)
-        st.markdown('<span class="badge-pass">✓ Passed first review — no refinement needed</span>', unsafe_allow_html=True)
-        st.write("")
-        render_content(gen_data)
-
-    st.success("🎉 Pipeline complete!")
+            with st.expander(f"[{run_id}] Grade {inp.get('grade')} — {inp.get('topic')} · {attempts} attempt(s) · {ts.get('started_at','')[:10]}"):
+                st.markdown(f'<span class="{badge}">{status.upper()}</span>', unsafe_allow_html=True)
+                tags = final.get("tags")
+                if tags:
+                    st.markdown(f"**Bloom's:** {tags.get('blooms_level')} · **Difficulty:** {tags.get('difficulty')} · **Subject:** {tags.get('subject')}")
+                st.json(art)
