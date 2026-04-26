@@ -1,16 +1,4 @@
-"""
-main.py — Eklavya AI Content Pipeline (Part 2)
-Governed, Auditable, Schema-Validated
 
-Extends Part 1 with:
-  - Strict Pydantic schemas (GeneratedContent now includes teacher_notes)
-  - Reviewer scores content 1–5 across 4 dimensions (pass: correctness>=4 AND avg>=3.5)
-  - RefinerAgent (max 2 attempts, each logged)
-  - TaggerAgent (runs only on approved content)
-  - RunArtifact — full audit trail saved to SQLite
-  - GET /history endpoint
-  - POST /generate returns full RunArtifact
-"""
 
 from fastapi import FastAPI, HTTPException, Depends, Query
 from fastapi.middleware.cors import CORSMiddleware
@@ -18,8 +6,8 @@ from sqlalchemy.orm import Session
 from openai import OpenAI
 from pydantic import ValidationError
 from datetime import datetime, timezone
-import json, os, re, time
 from typing import Optional
+import json, os, re, time, logging
 from dotenv import load_dotenv
 
 from schemas import (
@@ -30,6 +18,14 @@ from schemas import (
 from database import init_db, get_db, save_artifact, get_history
 
 load_dotenv()
+
+
+logging.basicConfig(
+    level  = logging.INFO,
+    format = "%(asctime)s [%(levelname)s] %(name)s — %(message)s",
+    datefmt= "%Y-%m-%dT%H:%M:%S",
+)
+logger = logging.getLogger("eklavya")
 
 # ── App ───────────────────────────────────────────────────────────────────────
 app = FastAPI(
@@ -51,21 +47,21 @@ app.add_middleware(
 @app.on_event("startup")
 def startup():
     init_db()
-    print("[Eklavya] DB initialised.")
+    logger.info("DB initialised.")
 
 
-# ── LLM client (Groq) ───────────────────
+
 GROQ_API_KEY = os.getenv("GROQ_API_KEY", "")
 client = OpenAI(
-    api_key    = GROQ_API_KEY,
-    base_url   = "https://api.groq.com/openai/v1",
+    api_key  = GROQ_API_KEY,
+    base_url = "https://api.groq.com/openai/v1",
 )
-MODEL = "llama-3.1-8b-instant"
+MODEL = "llama-3.1-8b-instant"  
 
-INTER_CALL_DELAY = 3   # seconds between agent calls — be kind to free tier
+INTER_CALL_DELAY = 3  
 
 
-# ── Shared helpers (unchanged from Part 1) ────────────────────────────────────
+# ── Shared helpers ────────────────────────────────────────────────────────────
 def extract_json(text: str) -> dict:
     """Strip markdown fences and parse JSON robustly."""
     clean = re.sub(r"```(?:json)?", "", text).strip().rstrip("`").strip()
@@ -76,11 +72,11 @@ def extract_json(text: str) -> dict:
 
 
 def call_llm(system: str, user: str) -> str:
-    """Call Grok with basic error handling."""
+   
     try:
         resp = client.chat.completions.create(
-            model    = MODEL,
-            messages = [
+            model       = MODEL,
+            messages    = [
                 {"role": "system", "content": system},
                 {"role": "user",   "content": user},
             ],
@@ -97,19 +93,18 @@ def call_llm(system: str, user: str) -> str:
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-# Agent 1 — GeneratorAgent  (UPGRADED from Part 1)
-#
-# Changes from Part 1:
-#   - Output now includes explanation.grade and teacher_notes
-#   - Pydantic ValidationError triggers one automatic retry
-#   - correct_index (int) replaces answer (str)
+# Agent 1 — GeneratorAgent  
+
 # ══════════════════════════════════════════════════════════════════════════════
 class GeneratorAgent:
     """
     Generates grade-appropriate educational content.
 
-    Input:  grade (int), topic (str), feedback (optional list of FieldFeedback)
+    Input:  grade (int), topic (str), feedback (optional List[FieldFeedback])
     Output: GeneratedContent (strictly validated by Pydantic)
+
+    Retry policy: on ValidationError or JSON parse failure → retries once,
+    then raises HTTPException 422 (graceful failure, never crashes).
     """
 
     SYSTEM = (
@@ -120,7 +115,7 @@ class GeneratorAgent:
     def _build_prompt(self, grade: int, topic: str, feedback=None) -> str:
         fb_block = ""
         if feedback:
-            issues = "\n".join(f'  - [{f.field}] {f.issue}' for f in feedback)
+            issues   = "\n".join(f'  - [{f.field}] {f.issue}' for f in feedback)
             fb_block = f"\nA previous draft was rejected. Fix these specific issues:\n{issues}\n"
 
         return f"""Create educational content about "{topic}" for Grade {grade} students.
@@ -154,16 +149,16 @@ Respond ONLY with this exact JSON structure:
     def run(self, grade: int, topic: str, feedback=None) -> GeneratedContent:
         """
         Generates content. On Pydantic ValidationError → retries once.
-        On second failure → raises HTTPException (graceful failure).
+        On second failure → raises HTTPException 422 (graceful failure).
         """
-        for attempt in range(2):   # max 1 retry on schema validation failure
+        for attempt in range(2):  
             try:
                 raw  = call_llm(self.SYSTEM, self._build_prompt(grade, topic, feedback))
                 data = extract_json(raw)
-                return GeneratedContent(**data)   # strict Pydantic validation
+                return GeneratedContent(**data)  
             except ValidationError as e:
                 if attempt == 0:
-                    print(f"[Generator] Schema validation failed, retrying… ({e})")
+                    logger.warning("Generator schema validation failed — retrying. Error: %s", e)
                     time.sleep(INTER_CALL_DELAY)
                     continue
                 raise HTTPException(
@@ -174,32 +169,32 @@ Respond ONLY with this exact JSON structure:
                 raise
             except (json.JSONDecodeError, KeyError, TypeError) as e:
                 if attempt == 0:
-                    print(f"[Generator] JSON parse failed, retrying… ({e})")
+                    logger.warning("Generator JSON parse failed — retrying. Error: %s", e)
                     time.sleep(INTER_CALL_DELAY)
                     continue
                 raise HTTPException(status_code=500, detail=f"Generator: invalid JSON — {e}")
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-# Agent 2 — ReviewerAgent  (UPGRADED from Part 1)
-#
-# Changes from Part 1:
-#   - Returns numeric scores (1–5) across 4 dimensions
-#   - Pass threshold computed in Python: correctness >= 4 AND avg >= 3.5
-#   - Feedback references specific fields (e.g. "explanation.text")
+# Agent 2 — ReviewerAgent  
+
+
 # ══════════════════════════════════════════════════════════════════════════════
 class ReviewerAgent:
     """
     Evaluates generated content quantitatively.
 
-    Pass threshold (documented):
+    Pass threshold (documented — computed in Python via Pydantic property):
       correctness >= 4  AND  average(all 4 scores) >= 3.5
+
+    Moving pass logic to a Pydantic property makes the gatekeeper role
+    auditable and independent of LLM hallucinations.
 
     Input:  GeneratedContent + grade
     Output: ReviewResult with scores, passed bool, field-level feedback
     """
 
-    # Pass thresholds — change here and README stays in sync
+    # Thresholds defined once here — README documents these same values
     MIN_CORRECTNESS = 4
     MIN_AVERAGE     = 3.5
 
@@ -243,9 +238,8 @@ Note: feedback array can be empty [] if content is excellent."""
             data   = extract_json(raw)
             scores = ReviewScores(**data["scores"])
 
-            # Pass/fail computed in Python — not delegated to the LLM
-            passed = scores.passes   # correctness >= 4 AND average >= 3.5
-
+           
+            passed   = scores.passes   
             feedback = [FieldFeedback(**f) for f in data.get("feedback", [])]
 
             return ReviewResult(scores=scores, passed=passed, feedback=feedback)
@@ -257,22 +251,22 @@ Note: feedback array can be empty [] if content is excellent."""
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-# Agent 3 — RefinerAgent  (NEW — extracted from inline Part 1 logic)
-#
-# Part 1 had inline: generator.run(..., feedback=review.feedback)
-# Part 2 makes this a proper agent class with bounded retries + logging.
+# Agent 3 — RefinerAgent 
+
+
+
 # ══════════════════════════════════════════════════════════════════════════════
 class RefinerAgent:
     """
     Improves content using field-level reviewer feedback.
 
-    Rules:
+    Rules (Bounded Retries):
       - Maximum 2 refinement attempts total across the pipeline run
-      - Each attempt is logged in the RunArtifact
-      - If content still fails after 2 attempts → final status = "rejected"
+      - Each attempt is logged in the RunArtifact.attempts[]
+      - If content still fails after 2 attempts → orchestrator sets status = "rejected"
 
-    Input:  grade, topic, feedback (List[FieldFeedback])
-    Output: GeneratedContent (same schema as GeneratorAgent)
+    Input:  grade, topic, feedback (List[FieldFeedback]), attempt_num
+    Output: (GeneratedContent, ReviewResult) tuple
     """
 
     def __init__(self, generator: GeneratorAgent, reviewer: ReviewerAgent):
@@ -280,13 +274,8 @@ class RefinerAgent:
         self.reviewer  = reviewer
 
     def run(self, grade: int, topic: str, feedback: list, attempt_num: int) -> tuple:
-        """
-        Run one refinement attempt.
-
-        Returns:
-            (GeneratedContent, ReviewResult) for the new attempt.
-        """
-        print(f"[Refiner] Attempt {attempt_num} — addressing {len(feedback)} feedback items")
+        """Run one refinement pass. Returns (new_draft, new_review)."""
+        logger.info("Refiner — attempt %d, addressing %d feedback items", attempt_num, len(feedback))
         time.sleep(INTER_CALL_DELAY)
         refined = self.generator.run(grade, topic, feedback=feedback)
         time.sleep(INTER_CALL_DELAY)
@@ -295,17 +284,14 @@ class RefinerAgent:
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-# Agent 4 — TaggerAgent  (NEW)
-#
-# Only runs on approved content. Classifies by subject, Bloom's level, difficulty.
-# ══════════════════════════════════════════════════════════════════════════════
+# Agent 4 — TaggerAgent  
 class TaggerAgent:
     """
     Classifies approved content with educational metadata.
 
     Only called when final status = "approved".
     Input:  GeneratedContent + grade
-    Output: TagResult
+    Output: TagResult { subject, topic, grade, difficulty, content_type[], blooms_level }
     """
 
     SYSTEM = (
@@ -331,7 +317,7 @@ Respond ONLY with this exact JSON:
 
 Rules:
 - difficulty: "Easy" | "Medium" | "Hard"
-- content_type: array, pick from ["Explanation", "Quiz", "Activity", "Discussion"]
+- content_type: array, values from ["Explanation", "Quiz", "Activity", "Discussion"]
 - blooms_level: one of "Remembering" | "Understanding" | "Applying" | "Analysing" | "Evaluating" | "Creating"
 """
         try:
@@ -344,23 +330,29 @@ Rules:
             raise HTTPException(status_code=500, detail=f"Tagger: invalid response — {e}")
 
 
-# ── Instantiate agents ────────────────────────────────────────────────────────
+# ── Instantiate agents (singletons per process) ───────────────────────────────
 generator = GeneratorAgent()
 reviewer  = ReviewerAgent()
 refiner   = RefinerAgent(generator, reviewer)
 tagger    = TaggerAgent()
 
-MAX_REFINEMENTS = 2   # spec: max 2 refinement attempts
+MAX_REFINEMENTS = 2  
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-# Orchestrator — deterministic pipeline loop
+# Orchestrator — deterministic, bounded pipeline loop
+#
+# Bounded Retries: loop hard-coded to terminate after MAX_REFINEMENTS+1 total
+# attempts, fulfilling the "explainable and bounded" requirement.
+#
+# Audit Trail: every attempt appended to artifact.attempts[], capturing the
+# "entire lifecycle from draft to final decision" as required.
 #
 # Flow:
-#   1. Generate
-#   2. Review
-#   3. If failed AND attempts < MAX_REFINEMENTS → Refine → go to 2
-#   4. If failed AND attempts == MAX_REFINEMENTS → status = "rejected"
+#   1. Generate initial draft
+#   2. Review it
+#   3. If failed AND refinements_used < MAX_REFINEMENTS → Refine → back to 2
+#   4. If failed AND refinements exhausted → status = "rejected"
 #   5. If passed → Tag → status = "approved"
 #   6. Save RunArtifact to DB
 #   7. Return RunArtifact
@@ -369,14 +361,14 @@ def run_orchestrator(req: ContentRequest, db: Session) -> RunArtifact:
     started_at = datetime.now(timezone.utc)
     attempts   = []
 
-    print(f"[Orchestrator] Starting run — grade={req.grade}, topic={req.topic}")
+    logger.info("Pipeline start — grade=%d, topic=%s, user=%s", req.grade, req.topic, req.user_id)
 
     # ── Attempt 1: initial generate + review ─────────────────────────────────
-    print(f"[Orchestrator] Attempt 1: Generate")
+    logger.info("Attempt 1 — Generator")
     draft  = generator.run(req.grade, req.topic)
     time.sleep(INTER_CALL_DELAY)
 
-    print(f"[Orchestrator] Attempt 1: Review")
+    logger.info("Attempt 1 — Reviewer")
     review = reviewer.run(draft, req.grade)
 
     attempts.append(AttemptLog(
@@ -385,13 +377,18 @@ def run_orchestrator(req: ContentRequest, db: Session) -> RunArtifact:
         review  = review,
         passed  = review.passed,
     ))
-    print(f"[Orchestrator] Attempt 1: passed={review.passed}, scores={review.scores.model_dump()}")
+    logger.info(
+        "Attempt 1 result — passed=%s, scores=%s, avg=%.2f",
+        review.passed,
+        review.scores.model_dump(),
+        review.scores.average,
+    )
 
-    # ── Refinement loop (max MAX_REFINEMENTS total attempts) ─────────────────
+    # ── Refinement loop — hard ceiling at MAX_REFINEMENTS ────────────────────
     attempt_num = 1
-    while not review.passed and attempt_num < MAX_REFINEMENTS + 1:
+    while not review.passed and attempt_num <= MAX_REFINEMENTS:
         attempt_num += 1
-        print(f"[Orchestrator] Refinement attempt {attempt_num}")
+        logger.info("Refinement attempt %d / %d", attempt_num, MAX_REFINEMENTS + 1)
 
         draft, review = refiner.run(
             grade       = req.grade,
@@ -406,19 +403,20 @@ def run_orchestrator(req: ContentRequest, db: Session) -> RunArtifact:
             review  = review,
             passed  = review.passed,
         ))
-        print(f"[Orchestrator] Attempt {attempt_num}: passed={review.passed}")
+        logger.info("Attempt %d result — passed=%s, avg=%.2f", attempt_num, review.passed, review.scores.average)
 
     # ── Final decision ────────────────────────────────────────────────────────
     if review.passed:
-        print(f"[Orchestrator] Approved — running Tagger")
+        logger.info("Approved — running Tagger")
         time.sleep(INTER_CALL_DELAY)
-        tags   = tagger.run(draft, req.grade)
-        final  = FinalResult(status="approved", content=draft, tags=tags)
+        tags  = tagger.run(draft, req.grade)
+        final = FinalResult(status="approved", content=draft, tags=tags)
     else:
-        print(f"[Orchestrator] Rejected after {len(attempts)} attempts")
-        final  = FinalResult(status="rejected", content=None, tags=None)
+        logger.warning("Rejected — failed after %d attempt(s)", len(attempts))
+        final = FinalResult(status="rejected", content=None, tags=None)
 
     finished_at = datetime.now(timezone.utc)
+    elapsed     = (finished_at - started_at).total_seconds()
 
     artifact = RunArtifact(
         user_id    = req.user_id or "anonymous",
@@ -428,17 +426,20 @@ def run_orchestrator(req: ContentRequest, db: Session) -> RunArtifact:
         timestamps = RunTimestamps(started_at=started_at, finished_at=finished_at),
     )
 
-    # ── Persist to DB ─────────────────────────────────────────────────────────
+    # ── Persist to DB (Audit Trail) ───────────────────────────────────────────
     save_artifact(
-        db           = db,
-        artifact_json= artifact.model_dump_json(),
-        run_id       = artifact.run_id,
-        user_id      = artifact.user_id,
-        grade        = req.grade,
-        topic        = req.topic,
-        final_status = final.status,
+        db            = db,
+        artifact_json = artifact.model_dump_json(),
+        run_id        = artifact.run_id,
+        user_id       = artifact.user_id,
+        grade         = req.grade,
+        topic         = req.topic,
+        final_status  = final.status,
     )
-    print(f"[Orchestrator] Saved run_id={artifact.run_id}, status={final.status}")
+    logger.info(
+        "Saved — run_id=%s, status=%s, attempts=%d, elapsed=%.1fs",
+        artifact.run_id, final.status, len(attempts), elapsed,
+    )
 
     return artifact
 
@@ -484,13 +485,14 @@ def history(
 @app.get("/health", summary="Health check")
 def health():
     return {
-        "status"  : "ok",
-        "version" : "2.0.0",
-        "model"   : MODEL,
-        "api_key_set": bool(GROQ_API_KEY),
-        "max_refinements": MAX_REFINEMENTS,
-        "pass_thresholds": {
-            "correctness_min": ReviewerAgent.MIN_CORRECTNESS,
-            "average_min"    : ReviewerAgent.MIN_AVERAGE,
+        "status"          : "ok",
+        "version"         : "2.0.0",
+        "provider"        : "Groq",
+        "model"           : MODEL,
+        "api_key_set"     : bool(GROQ_API_KEY),
+        "max_refinements" : MAX_REFINEMENTS,
+        "pass_thresholds" : {
+            "correctness_min" : ReviewerAgent.MIN_CORRECTNESS,
+            "average_min"     : ReviewerAgent.MIN_AVERAGE,
         },
-    }
+    }
