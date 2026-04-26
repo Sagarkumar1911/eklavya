@@ -329,7 +329,7 @@ Returns all stored `RunArtifact` records, newest first.
   "status": "ok",
   "version": "2.0.0",
   "provider": "Groq",
-  "model": "llama3-8b-8192",
+  "model": "llama-3.1-8b-instant",
   "max_refinements": 2,
   "pass_thresholds": { "correctness_min": 4, "average_min": 3.5 }
 }
@@ -353,7 +353,7 @@ Returns all stored `RunArtifact` records, newest first.
 |---|---|
 | Backend | Python 3.10+ · FastAPI · Uvicorn |
 | Frontend | Streamlit |
-| LLM | Groq (`llama3-8b-8192`) — free tier |
+| LLM | Groq (`llama-3.1-8b-instant`) — free tier |
 | Validation | Pydantic v2 |
 | Persistence | SQLAlchemy + SQLite |
 | Testing | pytest + unittest.mock |
